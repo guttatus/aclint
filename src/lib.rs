@@ -8,7 +8,7 @@ use core::{arch::asm, cell::UnsafeCell, mem::size_of};
 pub struct MTIME(UnsafeCell<u64>);
 
 #[repr(transparent)]
-pub struct MTIMECMP(UnsafeCell<u64>);
+pub struct MTIMECMP(UnsafeCell<u32>);
 
 #[repr(transparent)]
 pub struct MSIP(UnsafeCell<u32>);
@@ -17,7 +17,7 @@ pub struct MSIP(UnsafeCell<u32>);
 pub struct SETSSIP(UnsafeCell<u32>);
 
 #[repr(transparent)]
-pub struct MTIMER([MTIMECMP; 4095]);
+pub struct MTIMER([MTIMECMP; 4095*2]);
 
 #[repr(transparent)]
 pub struct MSWI([MSIP; 4095]);
@@ -49,12 +49,19 @@ impl SifiveClint {
 
     #[inline]
     pub fn read_mtimecmp(&self, hart_idx: usize) -> u64 {
-        unsafe { self.mtimer.0[hart_idx].0.get().read_volatile() }
+        let hart_idx = hart_idx * 2;
+        let val_l = unsafe { self.mtimer.0[hart_idx].0.get().read_volatile() };
+        let val_h = unsafe { self.mtimer.0[hart_idx+1].0.get().read_volatile() };
+        ((val_h as u64) << 32) | val_l as u64
     }
 
     #[inline]
     pub fn write_mtimecmp(&self, hart_idx: usize, val: u64) {
-        unsafe { self.mtimer.0[hart_idx].0.get().write_volatile(val) }
+        let val_l: u32 = u32::try_from(val & 0xffffffff).unwrap();
+        let val_h: u32 = u32::try_from(val >> 32).unwrap();
+        let hart_idx = hart_idx * 2;
+        unsafe { self.mtimer.0[hart_idx].0.get().write_volatile(val_l) }
+        unsafe { self.mtimer.0[hart_idx+1].0.get().write_volatile(val_h) }
     }
 
     #[inline]
